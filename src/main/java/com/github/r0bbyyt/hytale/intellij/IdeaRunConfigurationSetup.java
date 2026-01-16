@@ -13,12 +13,16 @@ import org.jetbrains.gradle.ext.IdeaExtPlugin;
 import org.jetbrains.gradle.ext.ProjectSettings;
 import org.jetbrains.gradle.ext.RunConfigurationContainer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 public class IdeaRunConfigurationSetup {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(IdeaRunConfigurationSetup.class);
   private static final String RUN_CONFIG_NAME = "Hytale Server";
 
   private static final String ARG_ALLOW_OP = "--allow-op";
@@ -30,28 +34,65 @@ public class IdeaRunConfigurationSetup {
   private static final String ASSETS_FILE = "Assets.zip";
 
   public void configure(Project project, HytaleExtension extension) {
-    project.getPlugins().apply(IdeaExtPlugin.class);
-    IdeaModel ideaModel = project.getExtensions().findByType(IdeaModel.class);
-    if (ideaModel == null || ideaModel.getProject() == null) {
+    LOGGER.info("Starting IDEA run configuration setup for project: {}", project.getName());
+
+    // Run configurations must be created on the root project's IdeaModel
+    Project rootProject = project.getRootProject();
+    rootProject.getPlugins().apply(IdeaExtPlugin.class);
+    LOGGER.debug("Applied IdeaExtPlugin to root project: {}", rootProject.getName());
+
+    IdeaModel ideaModel = rootProject.getExtensions().findByType(IdeaModel.class);
+    if (ideaModel == null) {
+      LOGGER.warn("IdeaModel is null on root project - cannot create run configuration");
       return;
     }
+    LOGGER.debug("Found IdeaModel: {}", ideaModel);
+
+    if (ideaModel.getProject() == null) {
+      LOGGER.warn("IdeaModel.getProject() is null - cannot create run configuration");
+      return;
+    }
+    LOGGER.debug("Found IdeaModel.project: {}", ideaModel.getProject());
 
     ProjectSettings projectSettings = Util.getExtension(ideaModel.getProject(), ProjectSettings.class);
+    if (projectSettings == null) {
+      LOGGER.warn("ProjectSettings extension is null - cannot create run configuration");
+      return;
+    }
+    LOGGER.debug("Found ProjectSettings: {}", projectSettings);
+
     RunConfigurationContainer runConfigurations = Util.getExtension(projectSettings, RunConfigurationContainer.class);
+    if (runConfigurations == null) {
+      LOGGER.warn("RunConfigurationContainer is null - cannot create run configuration");
+      return;
+    }
+    LOGGER.debug("Found RunConfigurationContainer: {}", runConfigurations);
 
-    runConfigurations.create(RUN_CONFIG_NAME, Application.class, config -> {
-      config.setMainClass(extension.getRunConfigMainClass().get());
+    try {
+      LOGGER.info("Creating run configuration '{}'", RUN_CONFIG_NAME);
+      runConfigurations.create(RUN_CONFIG_NAME, Application.class, config -> {
+        String mainClass = extension.getRunConfigMainClass().get();
+        LOGGER.debug("Setting mainClass: {}", mainClass);
+        config.setMainClass(mainClass);
 
-      File workingDir = extension.getWorkingDirectory().get().getAsFile();
-      workingDir.mkdirs();
-      config.setWorkingDirectory(workingDir.getAbsolutePath());
+        File workingDir = extension.getWorkingDirectory().get().getAsFile();
+        workingDir.mkdirs();
+        LOGGER.debug("Setting workingDirectory: {}", workingDir.getAbsolutePath());
+        config.setWorkingDirectory(workingDir.getAbsolutePath());
 
-      SourceSet mainSourceSet = project.getExtensions()
-        .getByType(SourceSetContainer.class)
-        .getByName(SourceSet.MAIN_SOURCE_SET_NAME);
-      config.setProgramParameters(this.buildProgramArguments(extension, mainSourceSet));
-      config.moduleRef(project, mainSourceSet);
-    });
+        SourceSet mainSourceSet = project.getExtensions()
+          .getByType(SourceSetContainer.class)
+          .getByName(SourceSet.MAIN_SOURCE_SET_NAME);
+        String programArgs = this.buildProgramArguments(extension, mainSourceSet);
+        LOGGER.debug("Setting programParameters: {}", programArgs);
+        config.setProgramParameters(programArgs);
+        config.moduleRef(project, mainSourceSet);
+
+        LOGGER.info("Successfully configured run configuration '{}'", RUN_CONFIG_NAME);
+      });
+    } catch (Exception e) {
+      LOGGER.error("Failed to create run configuration '{}': {}", RUN_CONFIG_NAME, e.getMessage(), e);
+    }
   }
 
   private String buildProgramArguments(HytaleExtension extension, SourceSet sourceSet) {

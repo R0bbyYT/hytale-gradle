@@ -12,6 +12,7 @@ import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.language.jvm.tasks.ProcessResources;
+import org.gradle.plugins.ide.idea.IdeaPlugin;
 import org.jetbrains.gradle.ext.IdeaExtPlugin;
 
 import java.io.IOException;
@@ -44,6 +45,7 @@ public class HytalePlugin implements Plugin<Project> {
   @Override
   public void apply(Project project) {
     PluginManager pluginManager = project.getPluginManager();
+    pluginManager.apply(IdeaPlugin.class);
     pluginManager.apply(IdeaExtPlugin.class);
 
     HytaleExtension extension = project.getExtensions().create(
@@ -96,10 +98,16 @@ public class HytalePlugin implements Plugin<Project> {
       project.afterEvaluate(p -> this.configureServerDependency(p, versionCacheFilePath));
     });
 
+    // Apply IDEA plugins to root project for run configuration support
+    Project rootProject = project.getRootProject();
+    rootProject.getPluginManager().apply(IdeaPlugin.class);
+    rootProject.getPluginManager().apply(IdeaExtPlugin.class);
+
     pluginManager.withPlugin(IDEA_PLUGIN_ID, appliedPlugin -> {
       IdeaRunConfigurationSetup ideaSetup = new IdeaRunConfigurationSetup();
       project.afterEvaluate(p -> ideaSetup.configure(p, extension));
     });
+    project.getLogger().info("Plugin apply() completed for project: {}", project.getName());
   }
 
 
