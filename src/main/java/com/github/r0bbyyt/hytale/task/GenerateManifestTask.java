@@ -108,7 +108,7 @@ public abstract class GenerateManifestTask extends DefaultTask {
 
   private AuthorInfoJson toJson(AuthorInfo author) {
     return new AuthorInfoJson(
-      author.getName().get(),
+      author.getName(),
       author.getEmail().getOrNull(),
       author.getUrl().getOrNull()
     );
